@@ -1,0 +1,66 @@
+
+name: Compilar APK Elantra
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar archivos
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Preparar proyecto
+        shell: bash
+        run: |
+          set -e
+          if [ -f settings.gradle ]; then
+            echo "PROJECT_DIR=$PWD" >> "$GITHUB_ENV"
+          else
+            ZIP=$(find . -maxdepth 1 -name '*.zip' -print -quit)
+            if [ -z "$ZIP" ]; then
+              echo "No se encontro un proyecto Android ni ZIP"
+              exit 1
+            fi
+            mkdir extracted
+            unzip -q "$ZIP" -d extracted
+            SETTINGS=$(find extracted -name settings.gradle -print -quit)
+            if [ -z "$SETTINGS" ]; then
+              echo "El ZIP no contiene settings.gradle"
+              exit 1
+            fi
+            echo "PROJECT_DIR=$PWD/$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+          fi
+
+      - name: Compilar APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Guardar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Elantra-Premium-APK
+          path: "**/build/outputs/apk/debug/*.apk"
+          if-no-files-found: error
